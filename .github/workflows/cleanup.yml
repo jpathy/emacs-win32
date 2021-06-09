@@ -1,0 +1,62 @@
+name: Cleanup
+
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+env:
+  KEEP_RELEASES: 3
+
+jobs:
+  Clean-old-releases:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Delete older releases
+      uses: actions/github-script@v4
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          let base = {
+            owner: context.repo.owner,
+            repo: context.repo.repo
+          };
+
+          console.log("::group::Deleting Releases");
+
+          let n = Number("${{env.KEEP_RELEASES}}");
+          if(n < 0) {
+            core.setFailed("KEEP_RELEASES has to be positive number, given: ${{env.KEEP_RELEASES}}");
+            return;
+          }
+
+          for await (const {data: rels} of github.paginate.iterator(
+            github.repos.listReleases,
+            {
+              ...base,
+            }
+          )) {
+            rels.forEach(e => {
+              if (!Boolean(e.prerelease)) {
+                return;
+              }
+              if (n > 0) {
+                n -= 1;
+              } else {
+                github.repos.deleteRelease({
+                  ...base,
+                  release_id: e.id
+                });
+                github.git.deleteRef({
+                  ...base,
+                  ref: `tags/${e.tag_name}`,
+                });
+                console.log(`Deleted release: ${e.name} and its tag: ${e.tag_name}`);
+              }
+            });
+          }
+
+          console.log("::endgroup::");
+          console.log("Finish.");

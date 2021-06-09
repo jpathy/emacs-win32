@@ -1,0 +1,42 @@
+name: Package
+
+on:
+  schedule:
+    - cron: '17 7 * * 0'
+  push:
+    tags:
+      - 'v[0-9]*'
+  workflow_dispatch:
+
+jobs:
+  Build-package:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          git
+          base-devel
+          mingw-w64-x86_64-toolchain
+          binutils
+    - name: Create Emacs package
+      env:
+        MINGW_ARCH: mingw64
+      run: |
+        ./emacs-msys2-build.ps1
+      shell: pwsh
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        files: ${{ env.PKGOUT }}
+        name: Emacs-${{ env.PKGDATE }}
+        tag_name: ${{ env.PKGDATE }}
+        body: |
+          Release mingw64 package for commit: ${{ env.COMMIT_URL }}
+        prerelease: true
